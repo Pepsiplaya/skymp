@@ -1,0 +1,16 @@
+[2026-07-02 10:57:51.933 -05:00] [info] [44264] [Settings.cpp:64] Loading...
+{
+	"fixes": {
+		"morphLimit": 128,
+		"moverLimit": 256,
+		"replaceStaticArray": true
+	}
+}
+[2026-07-02 10:57:51.933 -05:00] [info] [44264] [Settings.cpp:75] Loaded.
+{
+	"fixes": {
+		"morphLimit": 128,
+		"moverLimit": 256,
+		"replaceStaticArray": true
+	}
+}
