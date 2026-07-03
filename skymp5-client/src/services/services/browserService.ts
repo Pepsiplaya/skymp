@@ -85,7 +85,14 @@ export class BrowserService extends ClientListener {
   }
 
   private isBadMenu(menu: string) {
+    if (menu === Menu.Main && this.shouldShowBrowserOnMainMenu()) {
+      return false;
+    }
     return this.badMenus.includes(menu as Menu);
+  }
+
+  private shouldShowBrowserOnMainMenu() {
+    return (this.sp.settings["skymp5-client"]?.["gameData"] as any)?.characterFlow === "in-game";
   }
 
   private badMenusOpen = new Set<string>();

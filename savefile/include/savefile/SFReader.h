@@ -20,6 +20,7 @@ private:
 
   Header FillHeader();
   PluginInfo FillPluginInfo();
+  LightPluginInfo FillLightPluginInfo();
   FileLocationTable FillFileLocationTable();
   std::vector<GlobalData> FillGlobalData(uint32_t numObject);
   std::vector<ChangeForm> FillChangeForm(uint32_t numObject);

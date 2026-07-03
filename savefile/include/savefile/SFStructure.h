@@ -141,6 +141,12 @@ struct PluginInfo
   std::vector<std::string> pluginsName; // plugins[pluginCount]
 };
 
+struct LightPluginInfo
+{
+  uint16_t numPlugins = 0;
+  std::vector<std::string> pluginsName; // plugins[pluginCount]
+};
+
 struct Header
 {
   uint32_t version;
@@ -186,6 +192,7 @@ struct SaveFile
   uint8_t formVersion;                 // current as of Skyrim 1.9 is 74
   uint32_t pluginInfoSize;
   PluginInfo pluginInfo;
+  LightPluginInfo lightPluginInfo;
   FileLocationTable fileLocationTable;
   std::vector<GlobalData> globalDataTable1; // Types 0 to 8
   std::vector<GlobalData> globalDataTable2; // Types 100 to 114
@@ -205,6 +212,8 @@ struct SaveFile
   GlobalVariables::GlobalVariable* GetGlobalvariableByRefID(RefID& refID);
   int64_t FindIndexInFormIdArray(uint32_t refID);
   void OverwritePluginInfo(std::vector<std::string>& newPlaginNames);
+  void OverwritePluginInfo(std::vector<std::string>& newPluginNames,
+                           std::vector<std::string>& newLightPluginNames);
 };
 
 struct MiscStats

@@ -15,12 +15,16 @@ interface Manifest {
   loadOrder: Array<string>;
 }
 
-const getBsaNameByEspmName = (espmName: string) => {
-  if (espmName.endsWith(".esp") || espmName.endsWith(".esm")) {
-    const nameNoExt = espmName.split(".").slice(0, -1).join(".");
-    return nameNoExt + ".bsa";
+const assertPluginName = (pluginName: string) => {
+  const lowerName = pluginName.toLowerCase();
+  if (
+    lowerName.endsWith(".esp") ||
+    lowerName.endsWith(".esm") ||
+    lowerName.endsWith(".esl")
+  ) {
+    return;
   }
-  throw new Error(`'${espmName}' is not a valid esp or esm name`);
+  throw new Error(`'${pluginName}' is not a valid esp, esm, or esl name`);
 };
 
 export const generateManifest = (settings: Settings): void => {
@@ -39,23 +43,14 @@ export const generateManifest = (settings: Settings): void => {
       ? loadOrderElement
       : path.join(settings.dataDir, espmName);
 
+    assertPluginName(espmName);
+
     const buf: Uint8Array = fs.readFileSync(espmPath);
     manifest.mods.push({
       crc32: crc32.buf(buf),
       filename: espmName,
       size: buf.length,
     });
-
-    const bsaName = getBsaNameByEspmName(espmName);
-    const bsaPath = path.join(settings.dataDir, bsaName);
-    if (fs.existsSync(bsaPath)) {
-      const buf: Uint8Array = fs.readFileSync(bsaPath);
-      manifest.mods.push({
-        crc32: crc32.buf(buf),
-        filename: bsaName,
-        size: buf.length,
-      });
-    }
   });
 
   const manifestPath = path.join(settings.dataDir, "manifest.json");

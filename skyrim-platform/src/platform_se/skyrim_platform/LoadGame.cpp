@@ -7,6 +7,10 @@
 #include "savefile/SFSeekerOfDifferences.h"
 #include "savefile/SFWriter.h"
 
+#include <algorithm>
+#include <cctype>
+#include <unordered_set>
+
 namespace fs = std::filesystem;
 
 CMRC_DECLARE(skyrim_plugin_resources);
@@ -116,7 +120,7 @@ void LoadGame::Run(std::shared_ptr<SaveFile_::SaveFile> save,
   static LoadGameEventSink g_sink;
 
   if (auto saveLoadManager = RE::BGSSaveLoadManager::GetSingleton()) {
-    return saveLoadManager->Load(name.data());
+    return saveLoadManager->Load(name.data(), false);
   } else {
     throw NullPointerException("saveLoadManager");
   }
@@ -144,17 +148,30 @@ std::wstring LoadGame::GetPathToMyDocuments()
 void LoadGame::ModifyPluginInfo(std::shared_ptr<SaveFile_::SaveFile>& save)
 {
   std::vector<std::string> newPlugins;
+  std::vector<std::string> newLightPlugins;
   auto dataHandler = RE::TESDataHandler::GetSingleton();
 
   if (!dataHandler) {
     throw NullPointerException("dataHandler");
   }
 
-  for (auto& file : dataHandler->files) {
+#ifndef ENABLE_SKYRIM_VR
+  auto files = dataHandler->compiledFileCollection.files;
+  auto smallFiles = dataHandler->compiledFileCollection.smallFiles;
+#else
+  auto files = dataHandler->VRcompiledFileCollection->files;
+  auto smallFiles = dataHandler->VRcompiledFileCollection->smallFiles;
+#endif
+
+  for (auto& file : files) {
     newPlugins.push_back(std::string(file->fileName));
   }
 
-  save->OverwritePluginInfo(newPlugins);
+  for (auto& file : smallFiles) {
+    newLightPlugins.push_back(std::string(file->fileName));
+  }
+
+  save->OverwritePluginInfo(newPlugins, newLightPlugins);
 }
 
 void LoadGame::ModifySaveTime(std::shared_ptr<SaveFile_::SaveFile>& save,
@@ -232,7 +249,45 @@ void LoadGame::ModifyLoadOrder(std::shared_ptr<SaveFile_::SaveFile> save,
                                std::vector<std::string>* loadOrder)
 {
   if (loadOrder) {
-    save->OverwritePluginInfo(*loadOrder);
+    std::vector<std::string> regularPlugins;
+    std::vector<std::string> lightPlugins;
+    std::unordered_set<std::string> lightPluginNames;
+
+    auto toLower = [](std::string value) {
+      std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c) {
+        return static_cast<char>(std::tolower(c));
+      });
+      return value;
+    };
+
+    auto dataHandler = RE::TESDataHandler::GetSingleton();
+    if (dataHandler) {
+#ifndef ENABLE_SKYRIM_VR
+      auto smallFiles = dataHandler->compiledFileCollection.smallFiles;
+#else
+      auto smallFiles = dataHandler->VRcompiledFileCollection->smallFiles;
+#endif
+
+      for (auto& file : smallFiles) {
+        lightPluginNames.insert(toLower(std::string(file->fileName)));
+      }
+    }
+
+    for (auto& plugin : *loadOrder) {
+      const auto pluginLower = toLower(plugin);
+      const bool isLightPlugin =
+        lightPluginNames.find(pluginLower) != lightPluginNames.end() ||
+        (pluginLower.size() >= 4 &&
+         pluginLower.substr(pluginLower.size() - 4) == ".esl");
+
+      if (isLightPlugin) {
+        lightPlugins.push_back(plugin);
+      } else {
+        regularPlugins.push_back(plugin);
+      }
+    }
+
+    save->OverwritePluginInfo(regularPlugins, lightPlugins);
   }
 }
 

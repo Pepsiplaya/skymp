@@ -1,6 +1,5 @@
 #include "savefile/SFStructure.h"
 
-#include <cstring>
 #include <stdexcept>
 
 SaveFile_::RefID SaveFile_::RefID::CreateRefId(SaveFile& parentSaveFile,
@@ -9,13 +8,7 @@ SaveFile_::RefID SaveFile_::RefID::CreateRefId(SaveFile& parentSaveFile,
   RefID res;
 
   const auto countWas = parentSaveFile.formIDArrayCount;
-  const size_t n = countWas + 1;
-  uint32_t* newFormIDArray = new uint32_t[n];
-
-  memcpy(newFormIDArray, parentSaveFile.formIDArray.data(), countWas);
-  newFormIDArray[countWas] = formId;
-
-  parentSaveFile.formIDArray = { newFormIDArray, newFormIDArray + n };
+  parentSaveFile.formIDArray.push_back(formId);
   parentSaveFile.formIDArrayCount = countWas + 1;
 
   // fix offset
@@ -83,17 +76,42 @@ int64_t SaveFile_::SaveFile::FindIndexInFormIdArray(uint32_t refID)
 void SaveFile_::SaveFile::OverwritePluginInfo(
   std::vector<std::string>& newPluginNames)
 {
+  std::vector<std::string> newLightPluginNames;
+  OverwritePluginInfo(newPluginNames, newLightPluginNames);
+}
+
+void SaveFile_::SaveFile::OverwritePluginInfo(
+  std::vector<std::string>& newPluginNames,
+  std::vector<std::string>& newLightPluginNames)
+{
   uint32_t oldSize = this->pluginInfoSize;
+
+  if (!newLightPluginNames.empty() && this->formVersion < 78) {
+    this->formVersion = 78;
+  }
 
   this->pluginInfoSize = 1;
   this->pluginInfo.numPlugins = 0;
   this->pluginInfo.pluginsName.clear();
+  this->lightPluginInfo.numPlugins = 0;
+  this->lightPluginInfo.pluginsName.clear();
 
   this->pluginInfo.numPlugins = static_cast<uint8_t>(newPluginNames.size());
 
   for (auto& plugin : newPluginNames) {
     this->pluginInfo.pluginsName.push_back(plugin);
     this->pluginInfoSize += uint32_t(2 + plugin.size());
+  }
+
+  if (this->formVersion >= 78) {
+    this->pluginInfoSize += 2;
+    this->lightPluginInfo.numPlugins =
+      static_cast<uint16_t>(newLightPluginNames.size());
+
+    for (auto& plugin : newLightPluginNames) {
+      this->lightPluginInfo.pluginsName.push_back(plugin);
+      this->pluginInfoSize += uint32_t(2 + plugin.size());
+    }
   }
 
   uint32_t addSize = this->pluginInfoSize - oldSize;

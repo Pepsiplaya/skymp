@@ -64,7 +64,14 @@ void SaveFile_::Reader::CreateScriptStructure(std::vector<uint8_t> arrayBytes)
 
   structure->formVersion = Read8_bit();
   structure->pluginInfoSize = ReadUint32_bit();
+
+  const auto pluginInfoEnd =
+    currentReadPositionInFile + structure->pluginInfoSize;
   structure->pluginInfo = FillPluginInfo();
+  if (structure->formVersion >= 78 && currentReadPositionInFile < pluginInfoEnd) {
+    structure->lightPluginInfo = FillLightPluginInfo();
+  }
+  assert(this->currentReadPositionInFile == pluginInfoEnd);
 
   structure->fileLocationTable = FillFileLocationTable();
 
@@ -147,6 +154,19 @@ SaveFile_::PluginInfo SaveFile_::Reader::FillPluginInfo()
     name = ReadString(Read16_bit());
 
   return pluginInfo;
+}
+
+SaveFile_::LightPluginInfo SaveFile_::Reader::FillLightPluginInfo()
+{
+  LightPluginInfo lightPluginInfo;
+
+  lightPluginInfo.numPlugins = Read16_bit();
+  lightPluginInfo.pluginsName.resize(lightPluginInfo.numPlugins);
+
+  for (auto& name : lightPluginInfo.pluginsName)
+    name = ReadString(Read16_bit());
+
+  return lightPluginInfo;
 }
 
 SaveFile_::FileLocationTable SaveFile_::Reader::FillFileLocationTable()

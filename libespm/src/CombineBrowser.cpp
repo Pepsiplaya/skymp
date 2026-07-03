@@ -2,19 +2,37 @@
 #include "libespm/Browser.h"
 #include "libespm/RecordHeader.h"
 #include "libespm/Utils.h"
+#include <algorithm>
 #include <array>
+#include <cctype>
+#include <cstring>
 #include <fmt/format.h>
 #include <memory>
 #include <unordered_set>
 
 namespace espm {
 
+namespace {
+bool EqualsIgnoreCase(const std::string& left, const char* right) noexcept
+{
+  const auto rightLen = std::strlen(right);
+  if (left.size() != rightLen) {
+    return false;
+  }
+
+  return std::equal(left.begin(), left.end(), right, [](char a, char b) {
+    return std::tolower(static_cast<unsigned char>(a)) ==
+           std::tolower(static_cast<unsigned char>(b));
+  });
+}
+}
+
 int32_t CombineBrowser::Impl::GetFileIndex(const char* fileName) const noexcept
 {
   // returns index of sources array or -1 if not found
   if (fileName[0] != '\0') {
     for (size_t i = 0; i < sources.size(); ++i) {
-      if (sources[i].fileName == fileName) {
+      if (EqualsIgnoreCase(sources[i].fileName, fileName)) {
         return i;
       }
     }

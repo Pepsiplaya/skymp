@@ -29,7 +29,11 @@ const events = {
   clearAuthData: 'clearAuthData',
   updateRequired: 'updateRequired',
   backToLogin: 'backToLogin',
-  joinDiscord: 'joinDiscord'
+  joinDiscord: 'joinDiscord',
+  rpShowCharacterSlots: 'rpShowCharacterSlots',
+  rpBackToStart: 'rpBackToStart',
+  rpSelectCharacterOne: 'rpSelectCharacterOne',
+  rpSelectCharacterTwo: 'rpSelectCharacterTwo'
 };
 
 // Vaiables used on both client and browser side (see browsersideWidgetSetter)
@@ -39,6 +43,7 @@ let browserState = {
   loginFailedReason: '',
 };
 let authData: RemoteAuthGameData | null = null;
+let rpMenuState: 'start' | 'characters' = 'start';
 
 const translations = {
   "ru": {
@@ -128,8 +133,19 @@ export class AuthService extends ClientListener {
   private onAuthNeeded(e: AuthNeededEvent) {
     logTrace(this, `Received authNeeded event`);
 
-    const settingsGameData = this.sp.settings["skymp5-client"]["gameData"] as any;
+    const settingsGameData = this.getSettingsGameData();
     const isOfflineMode = Number.isInteger(settingsGameData?.profileId);
+    if (isOfflineMode && this.isInGameCharacterFlow()) {
+      logTrace(this, `Offline in-game character flow detected, showing RP menu`);
+      browserState.comment = '';
+      rpMenuState = 'start';
+      this.setListenBrowserMessage(true, 'RP menu auth flow requested');
+      this.trigger.authNeededFired = true;
+      this.controller.once("tick", () => this.onBrowserWindowLoadedAndRpAuthNeeded());
+      this.controller.once("update", () => this.onBrowserWindowLoadedAndRpAuthNeeded());
+      return;
+    }
+
     if (isOfflineMode) {
       logTrace(this, `Offline mode detected in settings, emitting auth event with authGameData.local`);
       this.controller.emitter.emit("authAttempt", { authGameData: { local: { profileId: settingsGameData.profileId } } });
@@ -139,7 +155,7 @@ export class AuthService extends ClientListener {
 
       this.trigger.authNeededFired = true;
       if (this.trigger.conditionMet) {
-        this.onBrowserWindowLoadedAndOnlineAuthNeeded();
+        this.onBrowserWindowLoadedAndAuthNeeded();
       }
     }
   }
@@ -149,7 +165,7 @@ export class AuthService extends ClientListener {
 
     this.trigger.browserWindowLoadedFired = true;
     if (this.trigger.conditionMet) {
-      this.onBrowserWindowLoadedAndOnlineAuthNeeded();
+      this.onBrowserWindowLoadedAndAuthNeeded();
     }
   }
 
@@ -290,6 +306,22 @@ export class AuthService extends ClientListener {
         this.authAttemptProgressIndicator = true;
 
         break;
+      case events.rpShowCharacterSlots:
+        rpMenuState = 'characters';
+        browserState.comment = '';
+        this.refreshRpMenu();
+        break;
+      case events.rpBackToStart:
+        rpMenuState = 'start';
+        browserState.comment = '';
+        this.refreshRpMenu();
+        break;
+      case events.rpSelectCharacterOne:
+        this.startLocalCharacterSlot(1);
+        break;
+      case events.rpSelectCharacterTwo:
+        this.startLocalCharacterSlot(2);
+        break;
       case events.clearAuthData:
         // Doesn't seem to be used
         this.writeAuthDataToDisk(null);
@@ -408,6 +440,63 @@ export class AuthService extends ClientListener {
     this.authDialogOpen = true;
   };
 
+  private refreshRpMenu() {
+    this.sp.browser.executeJavaScript(new FunctionInfo(this.rpMenuWidgetSetter).getText({ events, browserState, rpMenuState }));
+    this.authDialogOpen = true;
+  };
+
+  private onBrowserWindowLoadedAndAuthNeeded() {
+    if (this.isInGameCharacterFlow()) {
+      this.onBrowserWindowLoadedAndRpAuthNeeded();
+    } else {
+      this.onBrowserWindowLoadedAndOnlineAuthNeeded();
+    }
+  }
+
+  private onBrowserWindowLoadedAndRpAuthNeeded() {
+    if (!this.isListenBrowserMessage) {
+      logError(this, `isListenBrowserMessage was false for RP menu, aborting auth`);
+      return;
+    }
+
+    logTrace(this, `Showing Skyrim RP menu`);
+
+    rpMenuState = 'start';
+    browserState.comment = '';
+    this.refreshRpMenu();
+    this.sp.browser.setVisible(true);
+    this.sp.browser.setFocused(true);
+  }
+
+  private getSettingsGameData(): any {
+    return this.sp.settings["skymp5-client"]["gameData"] as any;
+  }
+
+  private isInGameCharacterFlow() {
+    return this.getSettingsGameData()?.characterFlow === 'in-game';
+  }
+
+  private startLocalCharacterSlot(slot: 1 | 2) {
+    const settingsGameData = this.getSettingsGameData();
+    const baseProfileId = settingsGameData?.profileId;
+    if (!Number.isInteger(baseProfileId)) {
+      browserState.comment = 'Launcher account missing. Restart from the launcher.';
+      rpMenuState = 'start';
+      this.refreshRpMenu();
+      return;
+    }
+
+    const profileId = baseProfileId + slot - 1;
+    logTrace(this, `Starting Skyrim RP character slot`, slot, `as profile`, profileId);
+
+    rpMenuState = 'characters';
+    browserState.comment = `Loading character slot ${slot}...`;
+    this.refreshRpMenu();
+
+    this.controller.emitter.emit("authAttempt", { authGameData: { local: { profileId } } });
+    this.authAttemptProgressIndicator = true;
+  }
+
   public readAuthDataFromDisk(): RemoteAuthGameData | null {
     logTrace(this, `Reading`, this.pluginAuthDataName, `from disk`);
 
@@ -517,6 +606,69 @@ export class AuthService extends ClientListener {
     });
 
     window.skyrimPlatform.widgets.set([widget]);
+  }
+
+  private rpMenuWidgetSetter = () => {
+    const homeWidget = {
+      type: "form",
+      id: 10,
+      caption: "Skyrim RP",
+      elements: [
+        {
+          type: "text",
+          text: "Enter the realm with your launcher account.",
+          tags: ["ELEMENT_STYLE_MARGIN_EXTENDED"],
+        },
+        {
+          type: "button",
+          text: "PLAY",
+          tags: ["BUTTON_STYLE_FRAME", "ELEMENT_STYLE_MARGIN_EXTENDED"],
+          click: () => window.skyrimPlatform.sendMessage(events.rpShowCharacterSlots),
+          hint: "Choose a character slot",
+        },
+        {
+          type: "text",
+          text: browserState.comment,
+          tags: [],
+        },
+      ]
+    };
+
+    const characterWidget = {
+      type: "form",
+      id: 11,
+      caption: "Choose Character",
+      elements: [
+        {
+          type: "button",
+          text: "Character Slot 1",
+          tags: ["BUTTON_STYLE_FRAME", "ELEMENT_STYLE_MARGIN_EXTENDED"],
+          click: () => window.skyrimPlatform.sendMessage(events.rpSelectCharacterOne),
+          hint: "Load character slot 1",
+        },
+        {
+          type: "button",
+          text: "Character Slot 2",
+          tags: ["BUTTON_STYLE_FRAME"],
+          click: () => window.skyrimPlatform.sendMessage(events.rpSelectCharacterTwo),
+          hint: "Load character slot 2",
+        },
+        {
+          type: "button",
+          text: "Back",
+          tags: ["ELEMENT_STYLE_MARGIN_EXTENDED"],
+          click: () => window.skyrimPlatform.sendMessage(events.rpBackToStart),
+          hint: "Return to the server menu",
+        },
+        {
+          type: "text",
+          text: browserState.comment,
+          tags: [],
+        },
+      ]
+    };
+
+    window.skyrimPlatform.widgets.set([rpMenuState === 'characters' ? characterWidget : homeWidget]);
   }
 
   private browsersideWidgetSetter = () => {
@@ -669,6 +821,15 @@ export class AuthService extends ClientListener {
         this.controller.lookupListener(NetworkingService).close();
         browserState.comment = "";
         browserState.loginFailedReason = strings.technicalIssues;
+        if (this.isInGameCharacterFlow()) {
+          browserState.comment = strings.technicalIssues;
+          rpMenuState = 'characters';
+          this.setListenBrowserMessage(true, 'RP local auth timed out');
+          this.refreshRpMenu();
+          this.sp.browser.setVisible(true);
+          this.sp.browser.setFocused(true);
+          return;
+        }
         this.sp.browser.executeJavaScript(new FunctionInfo(this.loginFailedWidgetSetter).getText({ events, browserState, authData: authData, strings }));
 
         authData = null;
@@ -688,7 +849,11 @@ export class AuthService extends ClientListener {
       const dot = slowCounter % 3 === 0 ? '.' : slowCounter % 3 === 1 ? '..' : '...';
 
       browserState.comment = strings.connecting + dot;
-      this.refreshWidgets();
+      if (this.isInGameCharacterFlow()) {
+        this.refreshRpMenu();
+      } else {
+        this.refreshWidgets();
+      }
     }
   }
 

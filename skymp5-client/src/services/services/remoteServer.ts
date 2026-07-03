@@ -572,36 +572,14 @@ export class RemoteServer extends ClientListener {
           if (!spawnTask.running) {
             spawnTask.running = true;
 
-            let loadOrder = new Array<string>();
-            for (let i = 0; i < this.sp.Game.getModCount(); ++i) {
-              loadOrder.push(this.sp.Game.getModName(i));
-            }
-
             logTrace(this, `loading game in world/cell`, msg.transform.worldOrCell.toString(16));
             const loadGameService = this.controller.lookupListener(LoadGameService);
             loadGameService.loadGame(
               msg.transform.pos,
               msg.transform.rot,
               msg.transform.worldOrCell,
-              msg.appearance
-                ? {
-                  name: msg.appearance.name,
-                  raceId: msg.appearance.raceId,
-
-                  // TODO: In types, isFemale is under face, but in the reality SP expects it here. Fix required.
-                  // @ts-expect-error
-                  isFemale: msg.appearance.isFemale,
-
-                  face: {
-                    hairColor: msg.appearance.hairColor,
-                    bodySkinColor: msg.appearance.skinColor,
-                    headTextureSetId: msg.appearance.headTextureSetId,
-                    headPartIds: msg.appearance.headpartIds,
-                    presets: msg.appearance.presets
-                  },
-                }
-                : undefined,
-              loadOrder,
+              undefined,
+              undefined,
               { minutes: 0, seconds: 0, hours: this.controller.lookupListener(TimeService).getTime().newGameHourValue }
             );
             once('update', () => {

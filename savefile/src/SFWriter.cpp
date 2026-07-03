@@ -40,6 +40,10 @@ bool SaveFile_::Writer::CreateSaveFile(const std::filesystem::path& p)
 
   Write(saveStructure->pluginInfo.numPlugins);
   Write(saveStructure->pluginInfo.pluginsName);
+  if (saveStructure->formVersion >= 78) {
+    Write(saveStructure->lightPluginInfo.numPlugins);
+    Write(saveStructure->lightPluginInfo.pluginsName);
+  }
 
   assert(this->currentWritePositionInFile ==
          saveStructure->pluginInfoSize + stepBeforePluginInfo);
